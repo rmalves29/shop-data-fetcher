@@ -1,1 +1,7 @@
 project_id = "buvglenexmsfkougsfob"
+
+[functions.tiktok-auth-callback]
+verify_jwt = false
+
+[functions.tiktok-shop-api]
+verify_jwt = false
