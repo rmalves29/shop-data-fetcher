@@ -24,7 +24,9 @@ async function makeApiRequest(
   accessToken: string, 
   appKey: string, 
   appSecret: string,
-  additionalParams: Record<string, string> = {}
+  additionalParams: Record<string, string> = {},
+  method: string = 'GET',
+  body?: object
 ) {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   
@@ -41,15 +43,20 @@ async function makeApiRequest(
   const queryString = new URLSearchParams(params).toString();
   const url = `${TIKTOK_API_BASE}${path}?${queryString}`;
 
-  console.log(`Making request to: ${path}`);
+  console.log(`Making ${method} request to: ${path}`);
   
-  const response = await fetch(url, {
-    method: 'GET',
+  const fetchOptions: RequestInit = {
+    method,
     headers: {
       'Content-Type': 'application/json',
     },
-  });
+  };
 
+  if (body && method === 'POST') {
+    fetchOptions.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, fetchOptions);
   return response.json();
 }
 
@@ -59,10 +66,11 @@ serve(async (req) => {
   }
 
   try {
-    const { action, access_token, shop_cipher, page_size = '20', cursor } = await req.json();
+    const { action, shop_cipher, page_size = '20', cursor } = await req.json();
 
     const appKey = Deno.env.get('TIKTOK_APP_KEY');
     const appSecret = Deno.env.get('TIKTOK_APP_SECRET');
+    const accessToken = Deno.env.get('TIKTOK_ACCESS_TOKEN');
 
     if (!appKey || !appSecret) {
       return new Response(
@@ -71,10 +79,10 @@ serve(async (req) => {
       );
     }
 
-    if (!access_token) {
+    if (!accessToken) {
       return new Response(
-        JSON.stringify({ error: 'Access token required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'TikTok access token not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -85,7 +93,7 @@ serve(async (req) => {
         // Get authorized shops
         result = await makeApiRequest(
           '/authorization/202309/shops',
-          access_token,
+          accessToken,
           appKey,
           appSecret
         );
@@ -101,7 +109,7 @@ serve(async (req) => {
         }
         result = await makeApiRequest(
           '/order/202309/orders/search',
-          access_token,
+          accessToken,
           appKey,
           appSecret,
           { 
@@ -122,7 +130,7 @@ serve(async (req) => {
         }
         result = await makeApiRequest(
           '/product/202309/products/search',
-          access_token,
+          accessToken,
           appKey,
           appSecret,
           { 
@@ -137,7 +145,7 @@ serve(async (req) => {
         // Get seller info
         result = await makeApiRequest(
           '/seller/202309/shops',
-          access_token,
+          accessToken,
           appKey,
           appSecret
         );
@@ -153,7 +161,7 @@ serve(async (req) => {
         }
         result = await makeApiRequest(
           '/finance/202309/settlements',
-          access_token,
+          accessToken,
           appKey,
           appSecret,
           { 
