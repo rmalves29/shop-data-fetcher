@@ -30,10 +30,10 @@ async function makeApiRequest(
 ) {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   
+  // For API v2, access_token goes in header, not in query params for signature
   const params: Record<string, string> = {
     app_key: appKey,
     timestamp: timestamp,
-    access_token: accessToken,
     ...additionalParams,
   };
 
@@ -43,12 +43,13 @@ async function makeApiRequest(
   const queryString = new URLSearchParams(params).toString();
   const url = `${TIKTOK_API_BASE}${path}?${queryString}`;
 
-  console.log(`Making ${method} request to: ${path}`);
+  console.log(`Making ${method} request to: ${url}`);
   
   const fetchOptions: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
+      'x-tts-access-token': accessToken,
     },
   };
 
@@ -57,7 +58,9 @@ async function makeApiRequest(
   }
 
   const response = await fetch(url, fetchOptions);
-  return response.json();
+  const data = await response.json();
+  console.log(`Response:`, JSON.stringify(data));
+  return data;
 }
 
 serve(async (req) => {
