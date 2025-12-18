@@ -1,4 +1,5 @@
-import { Bell, Settings, RefreshCw } from "lucide-react";
+import { Bell, Settings, RefreshCw, Link2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "./ui/button";
 
 export function Header() {
@@ -15,6 +16,11 @@ export function Header() {
         </p>
       </div>
       <div className="flex items-center gap-3">
+        <Link to="/integracoes">
+          <Button variant="outline" size="icon" className="relative">
+            <Link2 className="w-5 h-5" />
+          </Button>
+        </Link>
         <Button variant="outline" size="icon" className="relative">
           <Bell className="w-5 h-5" />
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse-glow" />
