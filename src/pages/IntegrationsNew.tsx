@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,6 +17,7 @@ import { useIntegrations } from '@/contexts/IntegrationsContext';
 import { IntegrationCard } from '@/components/integrations/IntegrationCard';
 import { MetricsGrid, MetricItem } from '@/components/integrations/MetricItem';
 import { SyncLogs } from '@/components/integrations/SyncLogs';
+import { ConnectionDialog } from '@/components/integrations/ConnectionDialog';
 
 const IntegrationsNew = () => {
   const {
@@ -28,6 +30,24 @@ const IntegrationsNew = () => {
     disconnectIntegration,
     getIntegrationData,
   } = useIntegrations();
+
+  const [connectionDialog, setConnectionDialog] = useState<{
+    open: boolean;
+    integrationId: string;
+    integrationName: string;
+  }>({
+    open: false,
+    integrationId: '',
+    integrationName: '',
+  });
+
+  const handleOpenConnectionDialog = (id: string, name: string) => {
+    setConnectionDialog({ open: true, integrationId: id, integrationName: name });
+  };
+
+  const handleConnect = (config?: { accessToken?: string; advertiserId?: string }) => {
+    connectIntegration(connectionDialog.integrationId, config);
+  };
 
   const formatCurrency = (value: number) => {
     return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
@@ -87,7 +107,7 @@ const IntegrationsNew = () => {
           {shopIntegration && (
             <IntegrationCard
               integration={shopIntegration}
-              onConnect={() => connectIntegration('tiktok_shop')}
+              onConnect={() => handleOpenConnectionDialog('tiktok_shop', 'TikTok Shop')}
               onDisconnect={() => disconnectIntegration('tiktok_shop')}
               onSync={() => refreshIntegration('tiktok_shop')}
               isSyncing={shopIntegration.status === 'syncing'}
@@ -124,7 +144,7 @@ const IntegrationsNew = () => {
           {adsIntegration && (
             <IntegrationCard
               integration={adsIntegration}
-              onConnect={() => connectIntegration('tiktok_ads')}
+              onConnect={() => handleOpenConnectionDialog('tiktok_ads', 'TikTok Ads')}
               onDisconnect={() => disconnectIntegration('tiktok_ads')}
               onSync={() => refreshIntegration('tiktok_ads')}
               isSyncing={adsIntegration.status === 'syncing'}
@@ -172,6 +192,17 @@ const IntegrationsNew = () => {
           {/* Sync Logs */}
           <SyncLogs logs={syncLogs} maxHeight="400px" />
         </div>
+
+        {/* Connection Dialog */}
+        <ConnectionDialog
+          open={connectionDialog.open}
+          onOpenChange={(open) =>
+            setConnectionDialog({ ...connectionDialog, open })
+          }
+          integrationId={connectionDialog.integrationId}
+          integrationName={connectionDialog.integrationName}
+          onConnect={handleConnect}
+        />
       </div>
     </div>
   );
