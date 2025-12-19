@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { getTikTokCredentials } from "../_shared/tiktok-credentials.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,18 +70,19 @@ serve(async (req) => {
   }
 
   try {
-    const { action, shop_cipher, page_size = '20', cursor } = await req.json();
+    const { action, shop_cipher, page_size = '20', cursor, user_id } = await req.json();
 
-    const appKey = Deno.env.get('TIKTOK_APP_KEY');
-    const appSecret = Deno.env.get('TIKTOK_APP_SECRET');
-    const accessToken = Deno.env.get('TIKTOK_ACCESS_TOKEN');
+    // Get credentials from database or fallback to environment variables
+    const credentials = await getTikTokCredentials(user_id);
 
-    if (!appKey || !appSecret) {
+    if (!credentials) {
       return new Response(
         JSON.stringify({ error: 'TikTok credentials not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { app_key: appKey, app_secret: appSecret, access_token: accessToken } = credentials;
 
     if (!accessToken) {
       return new Response(

@@ -123,9 +123,13 @@ export function useTikTokShop() {
     setData(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
       // First get shops
       const shopsResponse = await supabase.functions.invoke('tiktok-shop-api', {
-        body: { action: 'get_shops' }
+        body: { action: 'get_shops', user_id: userId }
       });
 
       console.log('Shops response:', shopsResponse);
@@ -172,10 +176,10 @@ export function useTikTokShop() {
       // Fetch orders and products in parallel
       const [ordersResponse, productsResponse] = await Promise.all([
         supabase.functions.invoke('tiktok-shop-api', {
-          body: { action: 'get_orders', shop_cipher: shopCipher }
+          body: { action: 'get_orders', shop_cipher: shopCipher, user_id: userId }
         }),
         supabase.functions.invoke('tiktok-shop-api', {
-          body: { action: 'get_products', shop_cipher: shopCipher }
+          body: { action: 'get_products', shop_cipher: shopCipher, user_id: userId }
         })
       ]);
 
