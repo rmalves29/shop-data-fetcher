@@ -15,12 +15,14 @@ import {
   TrendingUp,
   Eye,
   Zap,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useTikTokShop } from "@/hooks/useTikTokShop";
 import { useToast } from "@/hooks/use-toast";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
 
 const Integracoes = () => {
   const { toast } = useToast();
@@ -28,6 +30,8 @@ const Integracoes = () => {
   const { shops, isLoading, error, refetch, totalOrders, totalProducts, totalRevenue } = useTikTokShop();
   const [autoSync, setAutoSync] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showShopCredentials, setShowShopCredentials] = useState(false);
+  const [showAdsCredentials, setShowAdsCredentials] = useState(false);
 
   const isShopConnected = shops.length > 0 && !error;
   const isAdsConnected = false; // TikTok Ads não implementado ainda
@@ -222,6 +226,10 @@ const Integracoes = () => {
                       <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
                       Sincronizar
                     </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowShopCredentials(true)}>
+                      <Settings className="w-4 h-4 mr-2" />
+                      Configurar Credenciais
+                    </Button>
                     <Button variant="destructive" size="sm" onClick={() => {
                       toast({
                         title: "Desconectar",
@@ -246,10 +254,16 @@ const Integracoes = () => {
                     </div>
                   </div>
                   
-                  <Button onClick={handleConnectShop} className="gap-2" variant="gradient">
-                    <Zap className="w-4 h-4" />
-                    Conectar TikTok Shop
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button onClick={handleConnectShop} className="gap-2" variant="gradient">
+                      <Zap className="w-4 h-4" />
+                      Conectar via OAuth
+                    </Button>
+                    <Button onClick={() => setShowShopCredentials(true)} variant="outline" className="gap-2">
+                      <Settings className="w-4 h-4" />
+                      Configuração Manual
+                    </Button>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -346,10 +360,16 @@ const Integracoes = () => {
                     </div>
                   </div>
                   
-                  <Button onClick={handleConnectAds} className="gap-2" variant="outline">
-                    <Zap className="w-4 h-4" />
-                    Conectar TikTok Ads
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button onClick={handleConnectAds} className="gap-2" variant="outline">
+                      <Zap className="w-4 h-4" />
+                      Conectar via OAuth
+                    </Button>
+                    <Button onClick={() => setShowAdsCredentials(true)} variant="outline" className="gap-2">
+                      <Settings className="w-4 h-4" />
+                      Configuração Manual
+                    </Button>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -415,6 +435,18 @@ const Integracoes = () => {
           </Card>
         </div>
       </div>
+
+      {/* Dialogs de Credenciais */}
+      <CredentialsDialog
+        open={showShopCredentials}
+        onOpenChange={setShowShopCredentials}
+        integrationType="tiktok_shop"
+      />
+      <CredentialsDialog
+        open={showAdsCredentials}
+        onOpenChange={setShowAdsCredentials}
+        integrationType="tiktok_ads"
+      />
     </div>
   );
 };
