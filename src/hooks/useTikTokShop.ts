@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  saveOrders,
+  saveProducts,
+  getOrders,
+  getProducts,
+  getConnectionStatus,
+  setConnectionStatus,
+  DBOrder,
+  DBProduct,
+} from "@/lib/indexedDB";
 
 export interface TikTokShop {
   shop_id: string;
@@ -46,6 +56,8 @@ export interface TikTokData {
   totalRevenue: number;
   totalOrders: number;
   totalProducts: number;
+  isConnected: boolean;
+  lastSync: string | null;
 }
 
 export function useTikTokShop() {
@@ -58,8 +70,54 @@ export function useTikTokShop() {
     totalRevenue: 0,
     totalOrders: 0,
     totalProducts: 0,
+    isConnected: false,
+    lastSync: null,
   });
   const { toast } = useToast();
+
+  // Load cached data from IndexedDB on mount
+  const loadCachedData = useCallback(async () => {
+    try {
+      const status = getConnectionStatus();
+      const [cachedOrders, cachedProducts] = await Promise.all([
+        getOrders(),
+        getProducts(),
+      ]);
+
+      if (cachedOrders.length > 0 || cachedProducts.length > 0) {
+        const totalRevenue = cachedOrders.reduce((sum, order) => sum + order.total, 0);
+        
+        setData(prev => ({
+          ...prev,
+          orders: cachedOrders.map(o => ({
+            order_id: o.order_id,
+            order_status: o.status,
+            payment_info: { total_amount: String(o.total), currency: 'BRL' },
+            create_time: new Date(o.date).getTime() / 1000,
+            line_items: o.items?.map(item => ({
+              product_name: item.product_name,
+              sku_name: '',
+              quantity: item.quantity,
+            })),
+          })),
+          products: cachedProducts.map(p => ({
+            id: p.id,
+            title: p.title,
+            status: p.status,
+            sales: p.sales,
+            skus: [{ price: { sale_price: String(p.price) } }],
+          })),
+          totalRevenue,
+          totalOrders: cachedOrders.length,
+          totalProducts: cachedProducts.length,
+          isConnected: status.shop,
+          lastSync: status.last_sync,
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading cached data:', error);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     setData(prev => ({ ...prev, isLoading: true, error: null }));
@@ -79,6 +137,8 @@ export function useTikTokShop() {
       const shopsData = shopsResponse.data;
       
       if (shopsData.code !== 0) {
+        // Token invalid - mark as disconnected
+        setConnectionStatus({ shop: false });
         throw new Error(shopsData.message || 'TikTok API error');
       }
 
@@ -89,6 +149,7 @@ export function useTikTokShop() {
           ...prev,
           isLoading: false,
           shops: [],
+          isConnected: false,
           error: 'Nenhuma loja encontrada. Verifique se a conta foi autorizada corretamente.'
         }));
         return;
@@ -118,6 +179,36 @@ export function useTikTokShop() {
         return sum + amount;
       }, 0);
 
+      // Save to IndexedDB
+      const dbOrders: DBOrder[] = orders.map((order: TikTokOrder) => ({
+        order_id: order.order_id,
+        date: new Date(order.create_time * 1000).toISOString(),
+        total: parseFloat(order.payment_info?.total_amount || '0'),
+        source: 'SHOP',
+        status: order.order_status,
+        items: order.line_items?.map(item => ({
+          product_name: item.product_name,
+          quantity: item.quantity,
+        })),
+      }));
+
+      const dbProducts: DBProduct[] = products.map((product: TikTokProduct) => ({
+        id: product.id,
+        title: product.title,
+        status: product.status,
+        price: parseFloat(product.skus?.[0]?.price?.sale_price || '0'),
+        sales: product.sales,
+      }));
+
+      await Promise.all([
+        saveOrders(dbOrders),
+        saveProducts(dbProducts),
+      ]);
+
+      // Update connection status
+      const now = new Date().toISOString();
+      setConnectionStatus({ shop: true, last_sync: now });
+
       setData({
         shops,
         orders,
@@ -127,21 +218,29 @@ export function useTikTokShop() {
         totalRevenue,
         totalOrders: orders.length,
         totalProducts: products.length,
+        isConnected: true,
+        lastSync: now,
       });
 
       toast({
         title: "Dados atualizados",
-        description: `${orders.length} pedidos e ${products.length} produtos carregados.`,
+        description: `${orders.length} pedidos e ${products.length} produtos sincronizados.`,
       });
 
     } catch (error) {
       console.error('Error fetching TikTok data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao buscar dados';
+      
+      // Keep cached data but show error
+      const status = getConnectionStatus();
       setData(prev => ({
         ...prev,
         isLoading: false,
         error: errorMessage,
+        isConnected: status.shop,
+        lastSync: status.last_sync,
       }));
+      
       toast({
         title: "Erro ao carregar dados",
         description: errorMessage,
@@ -151,8 +250,8 @@ export function useTikTokShop() {
   }, [toast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    loadCachedData().then(() => fetchData());
+  }, [loadCachedData, fetchData]);
 
   return { ...data, refetch: fetchData };
 }
