@@ -151,6 +151,17 @@ export function useTikTokShop() {
           return;
         }
         
+        // Handle region not available error
+        if (shopsData.message?.includes('not available') || shopsData.message?.includes('region')) {
+          setData(prev => ({
+            ...prev,
+            isLoading: false,
+            isConnected: false,
+            error: 'TikTok Shop não disponível na sua região. Verifique se sua loja tem acesso ao TikTok Shop ou se a aplicação está configurada para a região correta.',
+          }));
+          return;
+        }
+        
         throw new Error(shopsData.message || 'TikTok API error');
       }
 
