@@ -73,7 +73,8 @@ const Integracoes = () => {
     const appKey = "6ih0dnluvugft";
     const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-auth-callback");
     const state = "shop_auth_" + Date.now();
-    const authUrl = `https://services.tiktokshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
+    // Use TikTok Global Shop endpoint (mais estável)
+    const authUrl = `https://services.tiktokglobalshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
     window.location.href = authUrl;
   };
 

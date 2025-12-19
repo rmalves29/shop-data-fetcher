@@ -6,22 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function generateSignature(params: Record<string, string>, appSecret: string): Promise<string> {
-  const sortedParams = Object.keys(params)
-    .sort()
-    .map(key => `${key}${params[key]}`)
-    .join('');
-  
-  const signString = `${appSecret}${sortedParams}${appSecret}`;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(signString);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
-  return signature;
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -32,6 +16,8 @@ serve(async (req) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
 
+    console.log('Callback received:', { code: code?.substring(0, 10) + '...', state });
+
     if (!code) {
       throw new Error('Authorization code not found');
     }
@@ -39,39 +25,52 @@ serve(async (req) => {
     const appKey = Deno.env.get('TIKTOK_APP_KEY') || '';
     const appSecret = Deno.env.get('TIKTOK_APP_SECRET') || '';
 
+    if (!appKey || !appSecret) {
+      throw new Error('TikTok credentials not configured');
+    }
+
     // Exchange code for access token
-    const timestamp = Math.floor(Date.now() / 1000);
     const params: Record<string, string> = {
       app_key: appKey,
-      app_secret: appSecret,
       auth_code: code,
       grant_type: 'authorized_code',
     };
 
-    const signature = await generateSignature(params, appSecret);
+    // Calculate signature: sort params -> concatenate -> wrap with secret -> SHA256
+    const sortedKeys = Object.keys(params).sort();
+    const signString = appSecret + sortedKeys.map(k => k + params[k]).join('') + appSecret;
+    
+    const encoder = new TextEncoder();
+    const data = encoder.encode(signString);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const requestBody = {
+      app_key: appKey,
+      auth_code: code,
+      grant_type: 'authorized_code',
+      sign: signature,
+    };
+
+    console.log('Token request body:', { ...requestBody, auth_code: code.substring(0, 10) + '...' });
 
     const tokenResponse = await fetch(
-      'https://auth.tiktok-shops.com/api/v2/token/get',
+      'https://auth.tiktokglobalshop.com/api/v2/token/get',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...params,
-          sign: signature,
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
-    if (!tokenResponse.ok) {
-      throw new Error(`Token exchange failed: ${tokenResponse.status}`);
-    }
-
     const tokenData = await tokenResponse.json();
+    console.log('Token response code:', tokenData.code, 'message:', tokenData.message);
 
     if (tokenData.code !== 0) {
-      throw new Error(tokenData.message || 'Token exchange failed');
+      throw new Error(tokenData.message || `Token exchange failed with code ${tokenData.code}`);
     }
 
     // Get user from session
