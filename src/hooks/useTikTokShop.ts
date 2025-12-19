@@ -137,8 +137,20 @@ export function useTikTokShop() {
       const shopsData = shopsResponse.data;
       
       if (shopsData.code !== 0) {
-        // Token invalid - mark as disconnected
+        // Token invalid or expired - mark as disconnected
         setConnectionStatus({ shop: false });
+        
+        // Handle token expiration specifically
+        if (shopsData.code === 105001 || shopsData.message?.includes('access token is invalid')) {
+          setData(prev => ({
+            ...prev,
+            isLoading: false,
+            isConnected: false,
+            error: 'Token expirado. Clique em "Conectar TikTok Shop" para reconectar.',
+          }));
+          return;
+        }
+        
         throw new Error(shopsData.message || 'TikTok API error');
       }
 
