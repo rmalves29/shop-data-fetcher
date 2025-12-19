@@ -184,17 +184,19 @@ export function IntegrationsProvider({ children }: { children: React.ReactNode }
     async (id: string, config?: ConnectionConfig) => {
       try {
         if (id === 'tiktok_shop') {
-          const appKey = '6ih0dnluvugft';
+          const appKey = import.meta.env.VITE_TIKTOK_APP_KEY;
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
           const redirectUri = encodeURIComponent(
-            'https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-auth-callback'
+            `${supabaseUrl}/functions/v1/tiktok-auth-callback`
           );
           const state = 'shop_auth_' + Date.now();
-          const authUrl = `https://services.tiktokshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
+          const authUrl = `https://services.tiktokglobalshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
           window.location.href = authUrl;
         } else if (id === 'tiktok_ads') {
-          const appId = '6ih0dnluvugft';
+          const appId = import.meta.env.VITE_TIKTOK_APP_KEY;
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
           const redirectUri = encodeURIComponent(
-            'https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-ads-callback'
+            `${supabaseUrl}/functions/v1/tiktok-ads-callback`
           );
           const state = 'ads_auth_' + Date.now();
           const authUrl = `https://business-api.tiktok.com/portal/auth?app_id=${appId}&redirect_uri=${redirectUri}&state=${state}`;

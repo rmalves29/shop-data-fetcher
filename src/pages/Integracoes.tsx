@@ -70,8 +70,9 @@ const Integracoes = () => {
 
   const handleConnectShop = () => {
     // Redireciona para o fluxo OAuth do TikTok Shop
-    const appKey = "6ih0dnluvugft";
-    const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-auth-callback");
+    const appKey = import.meta.env.VITE_TIKTOK_APP_KEY;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const redirectUri = encodeURIComponent(`${supabaseUrl}/functions/v1/tiktok-auth-callback`);
     const state = "shop_auth_" + Date.now();
     // Use TikTok Global Shop endpoint (mais estável)
     const authUrl = `https://services.tiktokglobalshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
@@ -80,8 +81,9 @@ const Integracoes = () => {
 
   const handleConnectAds = () => {
     // TikTok Marketing API OAuth - usa o mesmo app mas escopo diferente
-    const appId = "6ih0dnluvugft"; // TikTok for Business App ID
-    const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-ads-callback");
+    const appId = import.meta.env.VITE_TIKTOK_APP_KEY;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const redirectUri = encodeURIComponent(`${supabaseUrl}/functions/v1/tiktok-ads-callback`);
     const state = "ads_auth_" + Date.now();
     // TikTok Marketing API requer autenticação via business.tiktok.com
     const authUrl = `https://business-api.tiktok.com/portal/auth?app_id=${appId}&redirect_uri=${redirectUri}&state=${state}`;

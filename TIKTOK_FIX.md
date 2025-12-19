@@ -140,13 +140,29 @@ Token response code: 0 message: success
 
 ## 🚀 Deploy
 
+### Configuração de Segurança
+
+**Frontend (arquivo .env):**
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PROJECT_ID=your-project-id  
+VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key
+VITE_TIKTOK_APP_KEY=your-tiktok-app-key
+```
+
+⚠️ **IMPORTANTE**: 
+- Use `.env.example` como template
+- **NUNCA** commite o arquivo `.env` no Git
+- Todas as credenciais sensíveis devem estar em variáveis de ambiente
+
+**Backend (Supabase Secrets):**
 ```bash
 # 1. Fazer deploy da função atualizada
 supabase functions deploy tiktok-auth-callback
 
 # 2. Configurar secrets (se ainda não configurado)
-supabase secrets set TIKTOK_APP_KEY=6ih0dnluvugft
-supabase secrets set TIKTOK_APP_SECRET=seu_secret_aqui
+supabase secrets set TIKTOK_APP_KEY=your_app_key_here
+supabase secrets set TIKTOK_APP_SECRET=your_secret_here
 
 # 3. Testar a conexão
 # Acessar /integracoes e clicar em "Conectar TikTok Shop"

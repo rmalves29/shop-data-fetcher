@@ -38,9 +38,10 @@ export function ConnectionDialog({
   const isShop = integrationId === 'tiktok_shop';
   const isAds = integrationId === 'tiktok_ads';
 
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const redirectUri = isShop
-    ? 'https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-auth-callback'
-    : 'https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-ads-callback';
+    ? `${supabaseUrl}/functions/v1/tiktok-auth-callback`
+    : `${supabaseUrl}/functions/v1/tiktok-ads-callback`;
 
   const partnerPortalUrl = isShop
     ? 'https://partner.tiktokshop.com/'
