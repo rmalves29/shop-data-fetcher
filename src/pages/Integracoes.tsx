@@ -76,7 +76,19 @@ const Integracoes = () => {
     const state = "shop_auth_" + Date.now();
     // Use TikTok Global Shop endpoint (mais estável)
     const authUrl = `https://services.tiktokglobalshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
-    window.location.href = authUrl;
+    
+    console.log('🔗 TikTok Shop OAuth URL:', authUrl);
+    console.log('📋 Detalhes:', {
+      appKey,
+      redirectUri: decodeURIComponent(redirectUri),
+      state,
+      fullUrl: authUrl
+    });
+    
+    // Show confirmation dialog with URL
+    if (confirm(`Conectar TikTok Shop?\n\nVerifique o console (F12) para ver a URL completa.\n\nApp Key: ${appKey}\nRedirect: ${decodeURIComponent(redirectUri)}`)) {
+      window.location.href = authUrl;
+    }
   };
 
   const handleConnectAds = () => {
