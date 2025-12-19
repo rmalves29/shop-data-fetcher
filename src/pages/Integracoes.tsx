@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ShoppingBag,
@@ -15,35 +15,91 @@ import {
   TrendingUp,
   Eye,
   Zap,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useTikTokShop } from "@/hooks/useTikTokShop";
 import { useToast } from "@/hooks/use-toast";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
 
 const Integracoes = () => {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const { shops, isLoading, error, refetch, totalOrders, totalProducts, totalRevenue } = useTikTokShop();
   const [autoSync, setAutoSync] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showShopCredentials, setShowShopCredentials] = useState(false);
+  const [showAdsCredentials, setShowAdsCredentials] = useState(false);
 
   const isShopConnected = shops.length > 0 && !error;
   const isAdsConnected = false; // TikTok Ads não implementado ainda
 
+  // Check for connection/error messages from OAuth callback
+  useEffect(() => {
+    if (searchParams.get('tiktok_connected') === 'true') {
+      toast({
+        title: "✅ TikTok Shop conectado!",
+        description: "Sua conta foi conectada com sucesso. Sincronizando dados...",
+      });
+      refetch();
+    }
+    
+    const tiktokError = searchParams.get('tiktok_error');
+    if (tiktokError) {
+      toast({
+        title: "❌ Erro ao conectar TikTok Shop",
+        description: decodeURIComponent(tiktokError),
+        variant: "destructive",
+      });
+    }
+
+    const adsError = searchParams.get('tiktok_ads_error');
+    if (adsError) {
+      toast({
+        title: "❌ Erro ao conectar TikTok Ads",
+        description: decodeURIComponent(adsError),
+        variant: "destructive",
+      });
+    }
+
+    if (searchParams.get('tiktok_ads_connected') === 'true') {
+      toast({
+        title: "✅ TikTok Ads conectado!",
+        description: "Sua conta de anúncios foi conectada com sucesso.",
+      });
+    }
+  }, [searchParams, toast, refetch]);
+
   const handleConnectShop = () => {
     // Redireciona para o fluxo OAuth do TikTok Shop
-    const appKey = "6ih0dnluvugft";
-    const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-auth-callback");
+    const appKey = import.meta.env.VITE_TIKTOK_APP_KEY;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const redirectUri = encodeURIComponent(`${supabaseUrl}/functions/v1/tiktok-auth-callback`);
     const state = "shop_auth_" + Date.now();
-    const authUrl = `https://services.tiktokshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
-    window.location.href = authUrl;
+    // Use TikTok Global Shop endpoint (mais estável)
+    const authUrl = `https://services.tiktokglobalshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
+    
+    console.log('🔗 TikTok Shop OAuth URL:', authUrl);
+    console.log('📋 Detalhes:', {
+      appKey,
+      redirectUri: decodeURIComponent(redirectUri),
+      state,
+      fullUrl: authUrl
+    });
+    
+    // Show confirmation dialog with URL
+    if (confirm(`Conectar TikTok Shop?\n\nVerifique o console (F12) para ver a URL completa.\n\nApp Key: ${appKey}\nRedirect: ${decodeURIComponent(redirectUri)}`)) {
+      window.location.href = authUrl;
+    }
   };
 
   const handleConnectAds = () => {
     // TikTok Marketing API OAuth - usa o mesmo app mas escopo diferente
-    const appId = "6ih0dnluvugft"; // TikTok for Business App ID
-    const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-ads-callback");
+    const appId = import.meta.env.VITE_TIKTOK_APP_KEY;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const redirectUri = encodeURIComponent(`${supabaseUrl}/functions/v1/tiktok-ads-callback`);
     const state = "ads_auth_" + Date.now();
     // TikTok Marketing API requer autenticação via business.tiktok.com
     const authUrl = `https://business-api.tiktok.com/portal/auth?app_id=${appId}&redirect_uri=${redirectUri}&state=${state}`;
@@ -52,12 +108,21 @@ const Integracoes = () => {
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
-    await refetch();
-    setIsSyncing(false);
-    toast({
-      title: "Sincronização concluída",
-      description: "Dados atualizados com sucesso.",
-    });
+    try {
+      await refetch();
+      toast({
+        title: "Sincronização concluída",
+        description: "Dados atualizados com sucesso.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro na sincronização",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -161,6 +226,10 @@ const Integracoes = () => {
                       <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
                       Sincronizar
                     </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowShopCredentials(true)}>
+                      <Settings className="w-4 h-4 mr-2" />
+                      Configurar Credenciais
+                    </Button>
                     <Button variant="destructive" size="sm" onClick={() => {
                       toast({
                         title: "Desconectar",
@@ -185,10 +254,16 @@ const Integracoes = () => {
                     </div>
                   </div>
                   
-                  <Button onClick={handleConnectShop} className="gap-2" variant="gradient">
-                    <Zap className="w-4 h-4" />
-                    Conectar TikTok Shop
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button onClick={handleConnectShop} className="gap-2" variant="gradient">
+                      <Zap className="w-4 h-4" />
+                      Conectar via OAuth
+                    </Button>
+                    <Button onClick={() => setShowShopCredentials(true)} variant="outline" className="gap-2">
+                      <Settings className="w-4 h-4" />
+                      Configuração Manual
+                    </Button>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -285,10 +360,16 @@ const Integracoes = () => {
                     </div>
                   </div>
                   
-                  <Button onClick={handleConnectAds} className="gap-2" variant="outline">
-                    <Zap className="w-4 h-4" />
-                    Conectar TikTok Ads
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button onClick={handleConnectAds} className="gap-2" variant="outline">
+                      <Zap className="w-4 h-4" />
+                      Conectar via OAuth
+                    </Button>
+                    <Button onClick={() => setShowAdsCredentials(true)} variant="outline" className="gap-2">
+                      <Settings className="w-4 h-4" />
+                      Configuração Manual
+                    </Button>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -354,6 +435,18 @@ const Integracoes = () => {
           </Card>
         </div>
       </div>
+
+      {/* Dialogs de Credenciais */}
+      <CredentialsDialog
+        open={showShopCredentials}
+        onOpenChange={setShowShopCredentials}
+        integrationType="tiktok_shop"
+      />
+      <CredentialsDialog
+        open={showAdsCredentials}
+        onOpenChange={setShowAdsCredentials}
+        integrationType="tiktok_ads"
+      />
     </div>
   );
 };

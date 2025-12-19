@@ -25,9 +25,11 @@ export function Header() {
           <Bell className="w-5 h-5" />
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse-glow" />
         </Button>
-        <Button variant="outline" size="icon">
-          <Settings className="w-5 h-5" />
-        </Button>
+        <Link to="/configuracoes">
+          <Button variant="outline" size="icon">
+            <Settings className="w-5 h-5" />
+          </Button>
+        </Link>
         <Button variant="gradient" className="gap-2">
           <RefreshCw className="w-4 h-4" />
           Atualizar Dados

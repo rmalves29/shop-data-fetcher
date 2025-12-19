@@ -4,6 +4,33 @@
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
+## 🎯 TikTok Shop Analytics Dashboard
+
+Este projeto é um dashboard completo para análise de vendas do TikTok Shop com integração direta via API.
+
+### ✨ Funcionalidades
+
+- 📊 **Dashboard em tempo real** com métricas de vendas
+- 🔗 **Integração TikTok Shop** via OAuth
+- 💼 **Gerenciamento de Pedidos** e produtos
+- 📈 **Gráficos de vendas** e relatórios
+- ⚙️ **Configuração de credenciais** via interface
+- 🔐 **Armazenamento seguro** de credenciais no Supabase
+
+### 🔧 Configuração
+
+Para configurar as credenciais do TikTok Shop, consulte o arquivo [CONFIGURACAO_TIKTOK.md](./CONFIGURACAO_TIKTOK.md)
+
+**Acesso rápido:**
+1. Clique no ícone de **Configurações** (⚙️) no dashboard
+2. Preencha seu **App Key** e **App Secret**
+3. Conecte sua loja via **Integrações**
+4. Comece a usar!
+
+## Project info
+
+**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

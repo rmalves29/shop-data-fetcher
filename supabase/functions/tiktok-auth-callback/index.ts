@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,7 +8,7 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
@@ -15,95 +16,115 @@ serve(async (req) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
 
-    console.log('Received auth callback with code:', code ? 'present' : 'missing');
+    console.log('Callback received:', { code: code?.substring(0, 10) + '...', state });
 
     if (!code) {
-      return new Response(
-        JSON.stringify({ error: 'Authorization code not provided' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('Authorization code not found');
     }
 
-    const appKey = Deno.env.get('TIKTOK_APP_KEY');
-    const appSecret = Deno.env.get('TIKTOK_APP_SECRET');
+    const appKey = Deno.env.get('TIKTOK_APP_KEY') || '';
+    const appSecret = Deno.env.get('TIKTOK_APP_SECRET') || '';
 
     if (!appKey || !appSecret) {
-      console.error('Missing TikTok credentials');
-      return new Response(
-        JSON.stringify({ error: 'TikTok credentials not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('TikTok credentials not configured');
     }
 
-    // Exchange authorization code for access token
-    const tokenUrl = 'https://auth.tiktok-shops.com/api/v2/token/get';
-    const tokenResponse = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        app_key: appKey,
-        app_secret: appSecret,
-        auth_code: code,
-        grant_type: 'authorized_code',
-      }),
-    });
+    // Exchange code for access token
+    const params: Record<string, string> = {
+      app_key: appKey,
+      auth_code: code,
+      grant_type: 'authorized_code',
+    };
 
-    const tokenData = await tokenResponse.json();
-    console.log('Token exchange response:', JSON.stringify(tokenData));
-
-    if (tokenData.code !== 0) {
-      return new Response(
-        JSON.stringify({ error: 'Failed to get access token', details: tokenData }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Return the tokens - in production, you'd want to store these securely
-    const { access_token, refresh_token, access_token_expire_in } = tokenData.data;
-
-    // Redirect back to the app with success message
-    const redirectUrl = new URL(Deno.env.get('SUPABASE_URL') || '');
-    const appUrl = redirectUrl.origin.replace('supabase.co', 'lovable.app').replace('buvglenexmsfkougsfob.', '');
+    // Calculate signature: sort params -> concatenate -> wrap with secret -> SHA256
+    const sortedKeys = Object.keys(params).sort();
+    const signString = appSecret + sortedKeys.map(k => k + params[k]).join('') + appSecret;
     
-    return new Response(
-      `<!DOCTYPE html>
-      <html>
-        <head>
-          <title>TikTok Shop Authorization</title>
-          <style>
-            body { font-family: system-ui; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: white; }
-            .container { text-align: center; padding: 2rem; }
-            .success { color: #10b981; font-size: 1.5rem; margin-bottom: 1rem; }
-            .token { background: #2d2d44; padding: 1rem; border-radius: 8px; margin: 1rem 0; word-break: break-all; font-size: 0.75rem; }
-            .label { color: #9ca3af; margin-bottom: 0.5rem; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="success">✓ Autorização bem sucedida!</div>
-            <p>Guarde o Access Token abaixo para usar na integração:</p>
-            <div class="label">Access Token:</div>
-            <div class="token">${access_token}</div>
-            <div class="label">Refresh Token:</div>
-            <div class="token">${refresh_token}</div>
-            <div class="label">Expira em: ${Math.floor(access_token_expire_in / 3600)} horas</div>
-          </div>
-        </body>
-      </html>`,
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'text/html' } 
+    const encoder = new TextEncoder();
+    const data = encoder.encode(signString);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const requestBody = {
+      app_key: appKey,
+      auth_code: code,
+      grant_type: 'authorized_code',
+      sign: signature,
+    };
+
+    console.log('Token request body:', { ...requestBody, auth_code: code.substring(0, 10) + '...' });
+
+    const tokenResponse = await fetch(
+      'https://auth.tiktokglobalshop.com/api/v2/token/get',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
       }
     );
 
-  } catch (error: unknown) {
-    console.error('Error in tiktok-auth-callback:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    const tokenData = await tokenResponse.json();
+    console.log('Token response code:', tokenData.code, 'message:', tokenData.message);
+
+    if (tokenData.code !== 0) {
+      throw new Error(tokenData.message || `Token exchange failed with code ${tokenData.code}`);
+    }
+
+    // Get user from session
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
+
+    // For now, we'll use a simple approach to store the token
+    // In production, you should properly handle user authentication
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      const { data: { user } } = await supabaseClient.auth.getUser(
+        authHeader.replace('Bearer ', '')
+      );
+
+      if (user) {
+        const expiresAt = new Date(Date.now() + tokenData.data.expires_in * 1000);
+
+        await supabaseClient.from('tiktok_auth').upsert({
+          user_id: user.id,
+          access_token: tokenData.data.access_token,
+          refresh_token: tokenData.data.refresh_token,
+          expires_at: expiresAt.toISOString(),
+          open_id: tokenData.data.open_id,
+          seller_id: tokenData.data.seller_id,
+          seller_base_region: tokenData.data.seller_base_region,
+        });
+      }
+    }
+
+    // Redirect to integrations page
+    const redirectUrl = `${url.origin}/integracoes?tiktok_connected=true`;
+    
+    return new Response(null, {
+      status: 302,
+      headers: {
+        ...corsHeaders,
+        'Location': redirectUrl,
+      },
+    });
+
+  } catch (error: any) {
+    console.error('Error:', error);
+    
+    const url = new URL(req.url);
+    const redirectUrl = `${url.origin}/integracoes?tiktok_error=${encodeURIComponent(error.message)}`;
+    
+    return new Response(null, {
+      status: 302,
+      headers: {
+        ...corsHeaders,
+        'Location': redirectUrl,
+      },
+    });
   }
 });
