@@ -40,13 +40,20 @@ const Index = () => {
         <div className="space-y-6">
           {/* Status Bar */}
           <div className="flex items-center justify-between glass rounded-xl p-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1">
               <div className={`w-3 h-3 rounded-full ${error ? 'bg-destructive' : 'bg-primary'} animate-pulse`} />
-              <span className="text-sm text-muted-foreground">
-                {isLoading ? 'Carregando dados do TikTok Shop...' : 
-                 error ? `Erro: ${error}` : 
-                 `Conectado · ${totalOrders} pedidos · ${totalProducts} produtos`}
-              </span>
+              <div className="flex-1">
+                <span className={`text-sm ${error ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                  {isLoading ? 'Carregando dados do TikTok Shop...' : 
+                   error ? `⚠️ ${error}` : 
+                   `Conectado · ${totalOrders} pedidos · ${totalProducts} produtos`}
+                </span>
+                {error && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Verifique sua conexão ou tente reconectar em Integrações
+                  </p>
+                )}
+              </div>
             </div>
             <Button 
               variant="outline" 

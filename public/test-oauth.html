@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok OAuth Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .url-box {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            background: #fe2c55;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover { background: #d91d3f; }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2196f3;
+            margin: 20px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        .error {
+            background: #ffebee;
+            padding: 15px;
+            border-left: 4px solid #f44336;
+            margin: 20px 0;
+        }
+        .success {
+            background: #e8f5e9;
+            padding: 15px;
+            border-left: 4px solid #4caf50;
+            margin: 20px 0;
+        }
+        pre {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 TikTok Shop OAuth - Teste de Conexão</h1>
+        
+        <div class="warning">
+            <strong>⚠️ IMPORTANTE:</strong> Esta é uma página de TESTE. Use apenas para debug.
+        </div>
+
+        <h2>Configuração Atual</h2>
+        <pre id="config"></pre>
+
+        <h2>URL OAuth Gerada</h2>
+        <div class="url-box" id="oauth-url"></div>
+
+        <h2>Ações</h2>
+        <button onclick="showUrl()">1. Mostrar URL Completa</button>
+        <button onclick="copyUrl()">2. Copiar URL</button>
+        <button onclick="testUrl()">3. Testar Conexão</button>
+        <button onclick="openUrl()">4. Abrir URL OAuth</button>
+
+        <div id="result"></div>
+
+        <h2>❓ Como usar</h2>
+        <div class="info">
+            <ol>
+                <li><strong>Clique em "Mostrar URL Completa"</strong> para ver a URL que será gerada</li>
+                <li><strong>Verifique</strong> se a URL começa com <code>https://services.tiktokglobalshop.com/</code></li>
+                <li><strong>Se estiver correta</strong>, clique em "Abrir URL OAuth"</li>
+                <li><strong>Se estiver errada</strong>, revise o arquivo .env</li>
+            </ol>
+        </div>
+
+        <h2>🔍 Checklist de Verificação</h2>
+        <div id="checklist"></div>
+    </div>
+
+    <script>
+        // Ler variáveis do .env (simulado - em produção virá do Vite)
+        const config = {
+            appKey: import.meta.env?.VITE_TIKTOK_APP_KEY || 'NÃO_CONFIGURADO',
+            supabaseUrl: import.meta.env?.VITE_SUPABASE_URL || 'NÃO_CONFIGURADO',
+        };
+
+        function generateOAuthUrl() {
+            const redirectUri = encodeURIComponent(`${config.supabaseUrl}/functions/v1/tiktok-auth-callback`);
+            const state = "shop_auth_test_" + Date.now();
+            return `https://services.tiktokglobalshop.com/open/authorize?app_key=${config.appKey}&redirect_uri=${redirectUri}&state=${state}`;
+        }
+
+        function updateConfig() {
+            document.getElementById('config').textContent = JSON.stringify({
+                'App Key': config.appKey,
+                'Supabase URL': config.supabaseUrl,
+                'Redirect URI': `${config.supabaseUrl}/functions/v1/tiktok-auth-callback`
+            }, null, 2);
+
+            const url = generateOAuthUrl();
+            document.getElementById('oauth-url').textContent = url;
+        }
+
+        function showUrl() {
+            const url = generateOAuthUrl();
+            const decoded = decodeURIComponent(url);
+            
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <div class="success">
+                    <h3>✅ URL Gerada</h3>
+                    <p><strong>Encoded:</strong></p>
+                    <pre>${url}</pre>
+                    <p><strong>Decoded:</strong></p>
+                    <pre>${decoded}</pre>
+                </div>
+            `;
+        }
+
+        function copyUrl() {
+            const url = generateOAuthUrl();
+            navigator.clipboard.writeText(url).then(() => {
+                const result = document.getElementById('result');
+                result.innerHTML = '<div class="success">✅ URL copiada para a área de transferência!</div>';
+                setTimeout(() => result.innerHTML = '', 3000);
+            });
+        }
+
+        function testUrl() {
+            const url = generateOAuthUrl();
+            const checks = [];
+
+            // Check 1: URL starts correctly
+            if (url.startsWith('https://services.tiktokglobalshop.com/')) {
+                checks.push('✅ URL começa com endpoint correto');
+            } else {
+                checks.push('❌ URL NÃO começa com https://services.tiktokglobalshop.com/');
+            }
+
+            // Check 2: Has app_key
+            if (config.appKey && config.appKey !== 'NÃO_CONFIGURADO') {
+                checks.push('✅ App Key configurado: ' + config.appKey);
+            } else {
+                checks.push('❌ App Key NÃO configurado');
+            }
+
+            // Check 3: Has redirect_uri
+            if (config.supabaseUrl && config.supabaseUrl !== 'NÃO_CONFIGURADO') {
+                checks.push('✅ Supabase URL configurado: ' + config.supabaseUrl);
+            } else {
+                checks.push('❌ Supabase URL NÃO configurado');
+            }
+
+            // Check 4: Redirect URI format
+            const redirectUri = `${config.supabaseUrl}/functions/v1/tiktok-auth-callback`;
+            if (redirectUri.includes('supabase.co')) {
+                checks.push('✅ Redirect URI correto: ' + redirectUri);
+            } else {
+                checks.push('❌ Redirect URI pode estar incorreto');
+            }
+
+            const allPassed = checks.filter(c => c.startsWith('✅')).length === checks.length;
+            const className = allPassed ? 'success' : 'error';
+
+            document.getElementById('result').innerHTML = `
+                <div class="${className}">
+                    <h3>${allPassed ? '✅ Todas as verificações passaram!' : '❌ Algumas verificações falharam'}</h3>
+                    <ul>
+                        ${checks.map(c => `<li>${c}</li>`).join('')}
+                    </ul>
+                    ${allPassed ? '<p><strong>A URL está correta! Você pode clicar em "Abrir URL OAuth"</strong></p>' : '<p><strong>Revise o arquivo .env antes de continuar</strong></p>'}
+                </div>
+            `;
+        }
+
+        function openUrl() {
+            const url = generateOAuthUrl();
+            const confirmed = confirm(
+                '🔗 Abrir URL OAuth do TikTok Shop?\n\n' +
+                'App Key: ' + config.appKey + '\n' +
+                'Redirect: ' + config.supabaseUrl + '/functions/v1/tiktok-auth-callback\n\n' +
+                'Verifique os dados acima antes de continuar.'
+            );
+            
+            if (confirmed) {
+                console.log('🔗 Opening OAuth URL:', url);
+                window.location.href = url;
+            }
+        }
+
+        function runChecklist() {
+            const checklist = [
+                {
+                    check: () => window.location.hostname !== 'seller-br.tiktok.com',
+                    pass: '✅ Você está no site CORRETO (não está no Seller Center)',
+                    fail: '❌ Você está no Seller Center do TikTok! Acesse seu próprio site.'
+                },
+                {
+                    check: () => config.appKey !== 'NÃO_CONFIGURADO',
+                    pass: '✅ App Key está configurado',
+                    fail: '❌ App Key NÃO configurado no .env'
+                },
+                {
+                    check: () => config.supabaseUrl !== 'NÃO_CONFIGURADO',
+                    pass: '✅ Supabase URL está configurado',
+                    fail: '❌ Supabase URL NÃO configurado no .env'
+                },
+                {
+                    check: () => {
+                        const url = generateOAuthUrl();
+                        return url.includes('services.tiktokglobalshop.com');
+                    },
+                    pass: '✅ URL OAuth está apontando para o endpoint correto',
+                    fail: '❌ URL OAuth NÃO está usando o endpoint correto'
+                }
+            ];
+
+            const results = checklist.map(item => {
+                const passed = item.check();
+                return `<li style="color: ${passed ? 'green' : 'red'}">${passed ? item.pass : item.fail}</li>`;
+            });
+
+            document.getElementById('checklist').innerHTML = `<ul>${results.join('')}</ul>`;
+        }
+
+        // Initialize
+        updateConfig();
+        runChecklist();
+    </script>
+</body>
+</html>

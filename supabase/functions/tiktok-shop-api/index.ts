@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { getTikTokCredentials } from "../_shared/tiktok-credentials.ts";
 
 const corsHeaders = {
@@ -7,87 +7,177 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const TIKTOK_API_BASE = 'https://open-api.tiktokglobalshop.com';
+interface TikTokAuthData {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_in: number;
+  open_id: string;
+  seller_id: string;
+  seller_base_region: string;
+}
 
-function generateSignature(path: string, params: Record<string, string>, appSecret: string): string {
-  // Sort parameters alphabetically and create signature string
-  const sortedKeys = Object.keys(params).sort();
-  const signString = sortedKeys.map(key => `${key}${params[key]}`).join('');
-  const stringToSign = `${appSecret}${path}${signString}${appSecret}`;
-  
-  const hmac = createHmac('sha256', appSecret);
-  hmac.update(stringToSign);
-  return hmac.digest('hex');
+async function getAccessToken(supabase: any, userId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('tiktok_auth')
+      .select('access_token, expires_at')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      console.error('Error fetching access token:', error);
+      return null;
+    }
+
+    // Check if token is expired
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      console.log('Access token expired');
+      return null;
+    }
+
+    return data.access_token;
+  } catch (error) {
+    console.error('Error in getAccessToken:', error);
+    return null;
+  }
 }
 
 async function makeApiRequest(
-  path: string, 
-  accessToken: string, 
-  appKey: string, 
-  appSecret: string,
-  additionalParams: Record<string, string> = {},
-  method: string = 'GET',
-  body?: object
-) {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
+  url: string,
+  accessToken: string,
+  params: Record<string, any> = {},
+  retries = 3
+): Promise<any> {
+  const appKey = Deno.env.get('TIKTOK_APP_KEY') || '';
+  const appSecret = Deno.env.get('TIKTOK_APP_SECRET') || '';
   
-  // For API v2, access_token goes in header, not in query params for signature
-  const params: Record<string, string> = {
+  // Generate timestamp and signature
+  const timestamp = Math.floor(Date.now() / 1000);
+  
+  // Build query string
+  const queryParams = new URLSearchParams({
     app_key: appKey,
-    timestamp: timestamp,
-    ...additionalParams,
-  };
+    timestamp: String(timestamp),
+    access_token: accessToken,
+    ...params,
+  });
 
-  const sign = generateSignature(path, params, appSecret);
-  params.sign = sign;
-
-  const queryString = new URLSearchParams(params).toString();
-  const url = `${TIKTOK_API_BASE}${path}?${queryString}`;
-
-  console.log(`Making ${method} request to: ${url}`);
+  // Generate signature
+  const paramString = Array.from(queryParams.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}${value}`)
+    .join('');
   
-  const fetchOptions: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-tts-access-token': accessToken,
-    },
-  };
+  const signString = `${appSecret}${paramString}${appSecret}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(signString);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-  if (body && method === 'POST') {
-    fetchOptions.body = JSON.stringify(body);
+  queryParams.append('sign', signature);
+
+  const fullUrl = `${url}?${queryParams.toString()}`;
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+
+    } catch (error: any) {
+      console.error(`Attempt ${i + 1}/${retries} failed:`, error.message);
+      
+      if (error.name === 'AbortError') {
+        if (i === retries - 1) {
+          throw new Error('Request timeout after multiple retries');
+        }
+      } else if (i === retries - 1) {
+        throw error;
+      }
+
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+    }
   }
 
-  const response = await fetch(url, fetchOptions);
-  const data = await response.json();
-  console.log(`Response:`, JSON.stringify(data));
-  return data;
+  throw new Error('Max retries exceeded');
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { action, shop_cipher, page_size = '20', cursor, user_id } = await req.json();
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false,
+        },
+      }
+    );
 
-    // Get credentials from database or fallback to environment variables
-    const credentials = await getTikTokCredentials(user_id);
-
-    if (!credentials) {
-      return new Response(
-        JSON.stringify({ error: 'TikTok credentials not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
     }
 
-    const { app_key: appKey, app_secret: appSecret, access_token: accessToken } = credentials;
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
 
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    const { action, shop_cipher, user_id } = await req.json();
+
+    // Try to get credentials from our new table first, then fallback to tiktok_auth
+    let accessToken = null;
+    if (user_id) {
+      const credentials = await getTikTokCredentials(user_id);
+      if (credentials && credentials.access_token) {
+        accessToken = credentials.access_token;
+      }
+    }
+    
+    // Fallback to old tiktok_auth table if no credentials found
+    if (!accessToken) {
+      accessToken = await getAccessToken(supabaseClient, user?.id || user_id);
+    }
+    
     if (!accessToken) {
       return new Response(
-        JSON.stringify({ error: 'TikTok access token not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          code: 105001,
+          message: 'Access token not found or expired',
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
       );
     }
 
@@ -95,108 +185,72 @@ serve(async (req) => {
 
     switch (action) {
       case 'get_shops':
-        // Get authorized shops
         result = await makeApiRequest(
-          '/authorization/202309/shops',
-          accessToken,
-          appKey,
-          appSecret
+          'https://open-api.tiktokglobalshop.com/api/shop/get_authorized_shop',
+          accessToken
         );
         break;
 
       case 'get_orders':
-        // Get orders list
         if (!shop_cipher) {
-          return new Response(
-            JSON.stringify({ error: 'shop_cipher required for orders' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          throw new Error('shop_cipher is required for get_orders');
         }
+        
+        // Get orders from last 30 days
+        const endTime = Math.floor(Date.now() / 1000);
+        const startTime = endTime - (30 * 24 * 60 * 60);
+        
         result = await makeApiRequest(
-          '/order/202309/orders/search',
+          'https://open-api.tiktokglobalshop.com/api/orders/search',
           accessToken,
-          appKey,
-          appSecret,
-          { 
+          {
             shop_cipher,
-            page_size,
-            ...(cursor && { cursor })
+            create_time_from: startTime,
+            create_time_to: endTime,
+            page_size: 50,
           }
         );
         break;
 
       case 'get_products':
-        // Get products list
         if (!shop_cipher) {
-          return new Response(
-            JSON.stringify({ error: 'shop_cipher required for products' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          throw new Error('shop_cipher is required for get_products');
         }
+        
         result = await makeApiRequest(
-          '/product/202309/products/search',
+          'https://open-api.tiktokglobalshop.com/api/products/search',
           accessToken,
-          appKey,
-          appSecret,
-          { 
+          {
             shop_cipher,
-            page_size,
-            ...(cursor && { cursor })
-          }
-        );
-        break;
-
-      case 'get_seller_info':
-        // Get seller info
-        result = await makeApiRequest(
-          '/seller/202309/shops',
-          accessToken,
-          appKey,
-          appSecret
-        );
-        break;
-
-      case 'get_finance':
-        // Get finance/settlements data
-        if (!shop_cipher) {
-          return new Response(
-            JSON.stringify({ error: 'shop_cipher required for finance' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        result = await makeApiRequest(
-          '/finance/202309/settlements',
-          accessToken,
-          appKey,
-          appSecret,
-          { 
-            shop_cipher,
-            page_size,
-            ...(cursor && { cursor })
+            page_size: 50,
           }
         );
         break;
 
       default:
-        return new Response(
-          JSON.stringify({ error: 'Invalid action', valid_actions: ['get_shops', 'get_orders', 'get_products', 'get_seller_info', 'get_finance'] }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        throw new Error(`Unknown action: ${action}`);
     }
-
-    console.log(`Action ${action} result:`, JSON.stringify(result));
 
     return new Response(
       JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
 
-  } catch (error: unknown) {
-    console.error('Error in tiktok-shop-api:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  } catch (error: any) {
+    console.error('Error:', error);
+    
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        code: -1,
+        message: error.message || 'Internal server error',
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
   }
 });
