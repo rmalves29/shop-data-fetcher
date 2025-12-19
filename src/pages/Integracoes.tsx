@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ShoppingBag,
@@ -20,39 +20,53 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useTikTokShop } from "@/hooks/useTikTokShop";
-import { useTikTokAds } from "@/hooks/useTikTokAds";
 import { useToast } from "@/hooks/use-toast";
 
 const Integracoes = () => {
   const { toast } = useToast();
-  const { 
-    shops, 
-    isLoading: shopLoading, 
-    error: shopError, 
-    refetch: refetchShop, 
-    totalOrders, 
-    totalProducts, 
-    totalRevenue 
-  } = useTikTokShop();
-  
-  const {
-    advertisers,
-    campaigns,
-    isLoading: adsLoading,
-    error: adsError,
-    refetch: refetchAds,
-    totalSpend,
-    totalImpressions,
-    totalClicks,
-    totalConversions,
-    roas,
-  } = useTikTokAds();
-  
+  const [searchParams] = useSearchParams();
+  const { shops, isLoading, error, refetch, totalOrders, totalProducts, totalRevenue } = useTikTokShop();
   const [autoSync, setAutoSync] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const isShopConnected = shops.length > 0 && !shopError;
-  const isAdsConnected = advertisers.length > 0 && !adsError;
+  const isShopConnected = shops.length > 0 && !error;
+  const isAdsConnected = false; // TikTok Ads não implementado ainda
+
+  // Check for connection/error messages from OAuth callback
+  useEffect(() => {
+    if (searchParams.get('tiktok_connected') === 'true') {
+      toast({
+        title: "✅ TikTok Shop conectado!",
+        description: "Sua conta foi conectada com sucesso. Sincronizando dados...",
+      });
+      refetch();
+    }
+    
+    const tiktokError = searchParams.get('tiktok_error');
+    if (tiktokError) {
+      toast({
+        title: "❌ Erro ao conectar TikTok Shop",
+        description: decodeURIComponent(tiktokError),
+        variant: "destructive",
+      });
+    }
+
+    const adsError = searchParams.get('tiktok_ads_error');
+    if (adsError) {
+      toast({
+        title: "❌ Erro ao conectar TikTok Ads",
+        description: decodeURIComponent(adsError),
+        variant: "destructive",
+      });
+    }
+
+    if (searchParams.get('tiktok_ads_connected') === 'true') {
+      toast({
+        title: "✅ TikTok Ads conectado!",
+        description: "Sua conta de anúncios foi conectada com sucesso.",
+      });
+    }
+  }, [searchParams, toast, refetch]);
 
   const handleConnectShop = () => {
     // Redireciona para o fluxo OAuth do TikTok Shop
@@ -75,15 +89,21 @@ const Integracoes = () => {
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
-    await Promise.all([
-      refetchShop(),
-      refetchAds()
-    ]);
-    setIsSyncing(false);
-    toast({
-      title: "Sincronização concluída",
-      description: "Dados atualizados com sucesso.",
-    });
+    try {
+      await refetch();
+      toast({
+        title: "Sincronização concluída",
+        description: "Dados atualizados com sucesso.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro na sincronização",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -264,55 +284,36 @@ const Integracoes = () => {
                         <DollarSign className="w-4 h-4" />
                         Gasto
                       </div>
-                      <p className="text-lg font-semibold">{formatCurrency(totalSpend)}</p>
+                      <p className="text-lg font-semibold">R$ 0,00</p>
                     </div>
                     <div className="p-3 rounded-lg bg-secondary/50">
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                         <Eye className="w-4 h-4" />
                         Impressões
                       </div>
-                      <p className="text-lg font-semibold">{totalImpressions.toLocaleString("pt-BR")}</p>
+                      <p className="text-lg font-semibold">0</p>
                     </div>
                     <div className="p-3 rounded-lg bg-secondary/50">
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                         <MousePointer className="w-4 h-4" />
                         Cliques
                       </div>
-                      <p className="text-lg font-semibold">{totalClicks.toLocaleString("pt-BR")}</p>
+                      <p className="text-lg font-semibold">0</p>
                     </div>
                     <div className="p-3 rounded-lg bg-secondary/50">
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                         <TrendingUp className="w-4 h-4" />
                         ROAS
                       </div>
-                      <p className="text-lg font-semibold">{roas.toFixed(2)}x</p>
+                      <p className="text-lg font-semibold">0x</p>
                     </div>
                     <div className="p-3 rounded-lg bg-secondary/50">
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                         <Radio className="w-4 h-4" />
-                        Conversões
+                        Conv. Live
                       </div>
-                      <p className="text-lg font-semibold">{totalConversions}</p>
+                      <p className="text-lg font-semibold">0</p>
                     </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button variant="outline" onClick={async () => {
-                      setIsSyncing(true);
-                      await refetchAds();
-                      setIsSyncing(false);
-                    }} disabled={isSyncing}>
-                      <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                      Sincronizar
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => {
-                      toast({
-                        title: "Desconectar",
-                        description: "Para desconectar, remova o Access Token nas configurações.",
-                      });
-                    }}>
-                      Desconectar
-                    </Button>
                   </div>
                 </>
               ) : (
@@ -382,27 +383,16 @@ const Integracoes = () => {
               </div>
 
               {/* Log de status */}
-              <div className="p-4 rounded-lg bg-background/50 border border-border/50 max-h-32 overflow-y-auto space-y-1">
+              <div className="p-4 rounded-lg bg-background/50 border border-border/50 max-h-32 overflow-y-auto">
                 <p className="text-xs text-muted-foreground font-mono">
-                  {shopLoading ? (
-                    <span className="text-primary">⏳ Sincronizando TikTok Shop...</span>
-                  ) : shopError ? (
-                    <span className="text-destructive">❌ Shop: {shopError}</span>
+                  {isLoading ? (
+                    <span className="text-primary">⏳ Sincronizando...</span>
+                  ) : error ? (
+                    <span className="text-destructive">❌ Erro: {error}</span>
                   ) : isShopConnected ? (
                     <span className="text-primary">✅ TikTok Shop conectado com sucesso</span>
                   ) : (
-                    <span className="text-muted-foreground">ℹ️ TikTok Shop não conectado</span>
-                  )}
-                </p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {adsLoading ? (
-                    <span className="text-primary">⏳ Sincronizando TikTok Ads...</span>
-                  ) : adsError ? (
-                    <span className="text-destructive">❌ Ads: {adsError}</span>
-                  ) : isAdsConnected ? (
-                    <span className="text-primary">✅ TikTok Ads conectado com sucesso ({campaigns.length} campanhas)</span>
-                  ) : (
-                    <span className="text-muted-foreground">ℹ️ TikTok Ads não conectado</span>
+                    <span className="text-muted-foreground">ℹ️ Nenhuma integração ativa</span>
                   )}
                 </p>
               </div>

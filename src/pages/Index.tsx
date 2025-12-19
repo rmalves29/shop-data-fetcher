@@ -12,9 +12,7 @@ import { MetricCard } from "@/components/MetricCard";
 import { SalesChart } from "@/components/SalesChart";
 import { TopProducts } from "@/components/TopProducts";
 import { RecentOrders } from "@/components/RecentOrders";
-import { AdsMetrics } from "@/components/AdsMetrics";
 import { useTikTokShop } from "@/hooks/useTikTokShop";
-import { useTikTokAds } from "@/hooks/useTikTokAds";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -22,27 +20,13 @@ const Index = () => {
   const { 
     orders, 
     products, 
-    isLoading: shopLoading, 
-    error: shopError, 
+    isLoading, 
+    error, 
     totalRevenue, 
     totalOrders, 
     totalProducts,
-    refetch: refetchShop 
+    refetch 
   } = useTikTokShop();
-
-  const {
-    totalSpend,
-    totalImpressions,
-    totalClicks,
-    totalConversions,
-    roas,
-    isLoading: adsLoading,
-    error: adsError,
-    refetch: refetchAds,
-  } = useTikTokAds();
-
-  const isLoading = shopLoading || adsLoading;
-  const error = shopError || adsError;
 
   const formatCurrency = (value: number) => {
     return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
@@ -56,25 +40,25 @@ const Index = () => {
         <div className="space-y-6">
           {/* Status Bar */}
           <div className="flex items-center justify-between glass rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${
-                error ? 'bg-destructive' : 
-                (shopLoading || adsLoading) ? 'bg-yellow-500' : 
-                'bg-primary'
-              } animate-pulse`} />
-              <span className="text-sm text-muted-foreground">
-                {isLoading ? 'Carregando dados do TikTok...' : 
-                 error ? `Erro: ${error}` : 
-                 `Conectado · Shop: ${totalOrders} pedidos · Ads: ${totalConversions} conversões`}
-              </span>
+            <div className="flex items-center gap-3 flex-1">
+              <div className={`w-3 h-3 rounded-full ${error ? 'bg-destructive' : 'bg-primary'} animate-pulse`} />
+              <div className="flex-1">
+                <span className={`text-sm ${error ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                  {isLoading ? 'Carregando dados do TikTok Shop...' : 
+                   error ? `⚠️ ${error}` : 
+                   `Conectado · ${totalOrders} pedidos · ${totalProducts} produtos`}
+                </span>
+                {error && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Verifique sua conexão ou tente reconectar em Integrações
+                  </p>
+                )}
+              </div>
             </div>
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={() => {
-                refetchShop();
-                refetchAds();
-              }}
+              onClick={refetch}
               disabled={isLoading}
               className="gap-2"
             >
@@ -129,17 +113,17 @@ const Index = () => {
                 />
                 <MetricCard
                   title="Taxa de Conversão"
-                  value={totalClicks > 0 ? `${((totalConversions / totalClicks) * 100).toFixed(2)}%` : "--"}
-                  change={totalClicks > 0 ? "TikTok Ads" : "Em breve"}
-                  changeType={totalClicks > 0 ? "positive" : "neutral"}
+                  value="--"
+                  change="Em breve"
+                  changeType="neutral"
                   icon={TrendingUp}
                   delay={200}
                 />
                 <MetricCard
-                  title="Impressões"
-                  value={totalImpressions > 0 ? totalImpressions.toLocaleString("pt-BR") : "--"}
-                  change={totalImpressions > 0 ? "TikTok Ads" : "Em breve"}
-                  changeType={totalImpressions > 0 ? "positive" : "neutral"}
+                  title="Visualizações"
+                  value="--"
+                  change="Em breve"
+                  changeType="neutral"
                   icon={Eye}
                   delay={250}
                 />
@@ -150,21 +134,11 @@ const Index = () => {
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <SalesChart />
-            <TopProducts products={products} isLoading={shopLoading} />
+            <TopProducts products={products} isLoading={isLoading} />
           </div>
 
-          {/* Ads Metrics */}
-          <AdsMetrics
-            totalSpend={totalSpend}
-            totalImpressions={totalImpressions}
-            totalClicks={totalClicks}
-            totalConversions={totalConversions}
-            roas={roas}
-            isLoading={adsLoading}
-          />
-
           {/* Recent Orders */}
-          <RecentOrders orders={orders} isLoading={shopLoading} />
+          <RecentOrders orders={orders} isLoading={isLoading} />
         </div>
       </div>
     </div>

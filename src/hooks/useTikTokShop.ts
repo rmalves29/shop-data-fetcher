@@ -60,6 +60,50 @@ export interface TikTokData {
   lastSync: string | null;
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
+const REQUEST_TIMEOUT = 30000;
+
+async function fetchWithRetry(
+  functionName: string,
+  body: any,
+  retries = MAX_RETRIES
+): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+      const response = await supabase.functions.invoke(functionName, {
+        body,
+        signal: controller.signal as any,
+      });
+
+      clearTimeout(timeout);
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Request failed');
+      }
+
+      return response;
+    } catch (error: any) {
+      console.error(`Attempt ${i + 1}/${retries} failed:`, error);
+      
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout - verifique sua conexão');
+      }
+
+      if (i === retries - 1) {
+        throw error;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (i + 1)));
+    }
+  }
+
+  throw new Error('Max retries exceeded');
+}
+
 export function useTikTokShop() {
   const [data, setData] = useState<TikTokData>({
     shops: [],
@@ -75,7 +119,6 @@ export function useTikTokShop() {
   });
   const { toast } = useToast();
 
-  // Load cached data from IndexedDB on mount
   const loadCachedData = useCallback(async () => {
     try {
       const status = getConnectionStatus();
@@ -123,24 +166,18 @@ export function useTikTokShop() {
     setData(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // First get shops
-      const shopsResponse = await supabase.functions.invoke('tiktok-shop-api', {
-        body: { action: 'get_shops' }
+      // Fetch shops with retry logic
+      const shopsResponse = await fetchWithRetry('tiktok-shop-api', {
+        action: 'get_shops'
       });
 
       console.log('Shops response:', shopsResponse);
 
-      if (shopsResponse.error) {
-        throw new Error(shopsResponse.error.message || 'Failed to fetch shops');
-      }
-
       const shopsData = shopsResponse.data;
       
       if (shopsData.code !== 0) {
-        // Token invalid or expired - mark as disconnected
         setConnectionStatus({ shop: false });
         
-        // Handle token expiration specifically
         if (shopsData.code === 105001 || shopsData.message?.includes('access token is invalid')) {
           setData(prev => ({
             ...prev,
@@ -180,13 +217,15 @@ export function useTikTokShop() {
 
       const shopCipher = shops[0]?.cipher;
 
-      // Fetch orders and products in parallel
+      // Fetch orders and products in parallel with retry logic
       const [ordersResponse, productsResponse] = await Promise.all([
-        supabase.functions.invoke('tiktok-shop-api', {
-          body: { action: 'get_orders', shop_cipher: shopCipher }
+        fetchWithRetry('tiktok-shop-api', {
+          action: 'get_orders',
+          shop_cipher: shopCipher
         }),
-        supabase.functions.invoke('tiktok-shop-api', {
-          body: { action: 'get_products', shop_cipher: shopCipher }
+        fetchWithRetry('tiktok-shop-api', {
+          action: 'get_products',
+          shop_cipher: shopCipher
         })
       ]);
 
@@ -196,7 +235,6 @@ export function useTikTokShop() {
       const orders = ordersResponse.data?.data?.orders || [];
       const products = productsResponse.data?.data?.products || [];
 
-      // Calculate totals
       const totalRevenue = orders.reduce((sum: number, order: TikTokOrder) => {
         const amount = parseFloat(order.payment_info?.total_amount || '0');
         return sum + amount;
@@ -228,7 +266,6 @@ export function useTikTokShop() {
         saveProducts(dbProducts),
       ]);
 
-      // Update connection status
       const now = new Date().toISOString();
       setConnectionStatus({ shop: true, last_sync: now });
 
@@ -254,7 +291,6 @@ export function useTikTokShop() {
       console.error('Error fetching TikTok data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao buscar dados';
       
-      // Keep cached data but show error
       const status = getConnectionStatus();
       setData(prev => ({
         ...prev,
