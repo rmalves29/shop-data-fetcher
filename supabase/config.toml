@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.tiktok-shop-api]
 verify_jwt = false
+
+[functions.tiktok-ads-callback]
+verify_jwt = false

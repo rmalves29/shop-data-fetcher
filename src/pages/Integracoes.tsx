@@ -34,16 +34,20 @@ const Integracoes = () => {
   const handleConnectShop = () => {
     // Redireciona para o fluxo OAuth do TikTok Shop
     const appKey = "6ih0dnluvugft";
+    const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-auth-callback");
     const state = "shop_auth_" + Date.now();
-    const authUrl = `https://services.tiktokshop.com/open/authorize?app_key=${appKey}&state=${state}`;
+    const authUrl = `https://services.tiktokshop.com/open/authorize?app_key=${appKey}&redirect_uri=${redirectUri}&state=${state}`;
     window.location.href = authUrl;
   };
 
   const handleConnectAds = () => {
-    toast({
-      title: "Em breve",
-      description: "A integração com TikTok Ads está em desenvolvimento.",
-    });
+    // TikTok Marketing API OAuth - usa o mesmo app mas escopo diferente
+    const appId = "6ih0dnluvugft"; // TikTok for Business App ID
+    const redirectUri = encodeURIComponent("https://buvglenexmsfkougsfob.supabase.co/functions/v1/tiktok-ads-callback");
+    const state = "ads_auth_" + Date.now();
+    // TikTok Marketing API requer autenticação via business.tiktok.com
+    const authUrl = `https://business-api.tiktok.com/portal/auth?app_id=${appId}&redirect_uri=${redirectUri}&state=${state}`;
+    window.location.href = authUrl;
   };
 
   const handleSyncNow = async () => {
